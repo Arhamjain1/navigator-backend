@@ -1,5 +1,29 @@
 const Product = require('../models/Product');
 
+// Helper function to normalize category (handle singular/plural)
+const normalizeCategory = (cat) => {
+  if (!cat) return cat;
+  const categoryMap = {
+    'jacket': 'jackets',
+    'jackets': 'jackets',
+    't-shirt': 't-shirts',
+    't-shirts': 't-shirts',
+    'tshirt': 't-shirts',
+    'tshirts': 't-shirts',
+    'shirt': 'shirts',
+    'shirts': 'shirts',
+    'sweatshirt': 'sweatshirts',
+    'sweatshirts': 'sweatshirts',
+    'jean': 'jeans',
+    'jeans': 'jeans',
+    'trouser': 'trousers',
+    'trousers': 'trousers',
+    'pant': 'trousers',
+    'pants': 'trousers'
+  };
+  return categoryMap[cat.toLowerCase()] || cat.toLowerCase();
+};
+
 // @desc    Get all products
 // @route   GET /api/products
 // @access  Public
@@ -9,17 +33,19 @@ const getProducts = async (req, res) => {
     
     let query = {};
 
-    // Category filter
+    // Category filter - normalize singular/plural
     if (category && category !== 'all') {
-      query.category = category;
+      query.category = normalizeCategory(category);
     }
 
-    // Search filter
+    // Search filter - also check normalized category names
     if (search) {
+      const normalizedSearch = normalizeCategory(search);
       query.$or = [
         { name: { $regex: search, $options: 'i' } },
         { description: { $regex: search, $options: 'i' } },
-        { tags: { $regex: search, $options: 'i' } }
+        { tags: { $regex: search, $options: 'i' } },
+        { category: normalizedSearch }
       ];
     }
 
