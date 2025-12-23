@@ -1,6 +1,69 @@
 const Order = require('../models/Order');
 const Cart = require('../models/Cart');
 
+// @desc    Create guest order (no login required)
+// @route   POST /api/orders/guest
+// @access  Public
+const createGuestOrder = async (req, res) => {
+  try {
+    const { shippingAddress, paymentMethod, items, itemsTotal, shippingPrice, taxPrice, totalAmount, guestEmail } = req.body;
+
+    if (!items || items.length === 0) {
+      return res.status(400).json({ message: 'No order items' });
+    }
+
+    if (!guestEmail) {
+      return res.status(400).json({ message: 'Email is required for guest checkout' });
+    }
+
+    const order = new Order({
+      isGuest: true,
+      guestEmail,
+      items,
+      shippingAddress,
+      paymentMethod,
+      itemsTotal,
+      shippingPrice,
+      taxPrice,
+      totalAmount,
+      // Mock payment - automatically mark as paid for card/upi
+      isPaid: paymentMethod !== 'cod',
+      paidAt: paymentMethod !== 'cod' ? Date.now() : null,
+      paymentResult: paymentMethod !== 'cod' ? {
+        id: `MOCK_${Date.now()}`,
+        status: 'completed',
+        updateTime: new Date().toISOString()
+      } : null,
+      status: 'confirmed'
+    });
+
+    const createdOrder = await order.save();
+    res.status(201).json(createdOrder);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// @desc    Get guest order by ID
+// @route   GET /api/orders/guest/:id
+// @access  Public
+const getGuestOrderById = async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id)
+      .populate('items.product');
+
+    if (order && order.isGuest) {
+      res.json(order);
+    } else {
+      res.status(404).json({ message: 'Order not found' });
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
 // @desc    Create new order
 // @route   POST /api/orders
 // @access  Private
@@ -205,8 +268,10 @@ const deleteOrder = async (req, res) => {
 
 module.exports = {
   createOrder,
+  createGuestOrder,
   getMyOrders,
   getOrderById,
+  getGuestOrderById,
   getAllOrders,
   updateOrderStatus,
   getOrderStats,
