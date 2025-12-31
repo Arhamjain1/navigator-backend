@@ -1,14 +1,14 @@
 const nodemailer = require('nodemailer');
 
-// Create transporter using environment variables
+// Create transporter using GoDaddy SMTP
 const createTransporter = () => {
-  // Using Gmail - you'll need to set up App Password
-  // Or use a service like SendGrid, Mailgun, etc.
   return nodemailer.createTransport({
-    service: 'gmail',
+    host: process.env.EMAIL_HOST || 'smtpout.secureserver.net',
+    port: parseInt(process.env.EMAIL_PORT) || 465,
+    secure: process.env.EMAIL_SECURE === 'true' || true, // true for port 465
     auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS, // App Password for Gmail
+      user: process.env.EMAIL_USER || 'info@navigatorclothing.in',
+      pass: process.env.EMAIL_PASS,
     },
   });
 };
@@ -279,7 +279,7 @@ const sendEmail = async (to, template, data) => {
     const emailTemplate = templates[template](data);
 
     const mailOptions = {
-      from: `"Navigator" <${process.env.EMAIL_USER}>`,
+      from: `"Navigator" <${process.env.EMAIL_FROM || process.env.EMAIL_USER}>`,
       to,
       subject: emailTemplate.subject,
       html: emailTemplate.html,
