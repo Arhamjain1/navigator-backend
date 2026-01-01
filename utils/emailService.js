@@ -1,6 +1,10 @@
 const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 
-// Create transporter using GoDaddy SMTP
+// Initialize Resend for production (cloud platforms)
+const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+
+// Create Nodemailer transporter for local development
 const createTransporter = () => {
   return nodemailer.createTransport({
     host: process.env.EMAIL_HOST || 'smtpout.secureserver.net',
@@ -11,6 +15,41 @@ const createTransporter = () => {
       pass: process.env.EMAIL_PASS,
     },
   });
+};
+
+// Send email via Resend (production)
+const sendViaResend = async (to, subject, html) => {
+  const { data, error } = await resend.emails.send({
+    from: 'Navigator <info@navigatorclothing.in>',
+    to: [to],
+    subject: subject,
+    html: html,
+  });
+  
+  if (error) {
+    throw new Error(error.message);
+  }
+  
+  return { messageId: data.id };
+};
+
+// Send email via Nodemailer (local development)
+const sendViaNodemailer = async (to, subject, html) => {
+  const transporter = createTransporter();
+  
+  console.log('[EMAIL] Verifying SMTP connection...');
+  await transporter.verify();
+  console.log('[EMAIL] SMTP connection verified successfully');
+  
+  const mailOptions = {
+    from: `"Navigator" <${process.env.EMAIL_FROM || process.env.EMAIL_USER}>`,
+    to,
+    subject,
+    html,
+  };
+  
+  const info = await transporter.sendMail(mailOptions);
+  return { messageId: info.messageId };
 };
 
 // Reusable footer component
@@ -641,33 +680,27 @@ const templates = {
 const sendEmail = async (to, template, data) => {
   try {
     console.log(`[EMAIL] Attempting to send "${template}" email to: ${to}`);
-    console.log(`[EMAIL] Config - Host: ${process.env.EMAIL_HOST}, Port: ${process.env.EMAIL_PORT}, User: ${process.env.EMAIL_USER ? 'SET' : 'NOT SET'}, Pass: ${process.env.EMAIL_PASS ? 'SET' : 'NOT SET'}`);
+    console.log(`[EMAIL] Using: ${resend ? 'Resend' : 'Nodemailer'}`);
     
-    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-      console.log('[EMAIL] Service not configured. Skipping email to:', to);
+    const emailTemplate = templates[template](data);
+    
+    let result;
+    
+    if (resend) {
+      // Use Resend for production (cloud platforms like Render)
+      console.log(`[EMAIL] Sending via Resend: ${emailTemplate.subject}`);
+      result = await sendViaResend(to, emailTemplate.subject, emailTemplate.html);
+    } else if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+      // Use Nodemailer for local development
+      console.log(`[EMAIL] Sending via Nodemailer: ${emailTemplate.subject}`);
+      result = await sendViaNodemailer(to, emailTemplate.subject, emailTemplate.html);
+    } else {
+      console.log('[EMAIL] No email service configured. Skipping email to:', to);
       return { success: false, message: 'Email service not configured' };
     }
 
-    const transporter = createTransporter();
-    
-    // Verify transporter connection
-    console.log('[EMAIL] Verifying SMTP connection...');
-    await transporter.verify();
-    console.log('[EMAIL] SMTP connection verified successfully');
-    
-    const emailTemplate = templates[template](data);
-
-    const mailOptions = {
-      from: `"Navigator" <${process.env.EMAIL_FROM || process.env.EMAIL_USER}>`,
-      to,
-      subject: emailTemplate.subject,
-      html: emailTemplate.html,
-    };
-
-    console.log(`[EMAIL] Sending email with subject: ${emailTemplate.subject}`);
-    const info = await transporter.sendMail(mailOptions);
-    console.log('[EMAIL] Sent successfully:', info.messageId);
-    return { success: true, messageId: info.messageId };
+    console.log('[EMAIL] Sent successfully:', result.messageId);
+    return { success: true, messageId: result.messageId };
   } catch (error) {
     console.error('[EMAIL] Error sending email:', error.message);
     console.error('[EMAIL] Full error:', error);
